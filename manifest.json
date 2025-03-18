@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Copy As Markdown",
+  "version": "1.0",
+  "description": "Copy the visible page text as markdown",
+  "permissions": [
+    "scripting",
+    "activeTab",
+    "clipboardWrite"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "copy as markdown"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["turndown.js", "content.js"]
+    }
+  ]
+}
