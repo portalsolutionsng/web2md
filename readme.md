@@ -20,6 +20,11 @@ with LLM.
    - Post‑processing steps remove any lingering markdown syntax so that only the visible text remains.
 3. **Clipboard Copy:** The processed Markdown is sent back to the popup, which copies it to the clipboard.
 4. **Feedback:** A “Copied” message is displayed in the popup once the operation is successful.
+5. **Session Mode:**  
+  - **Copy from Multiple Pages:** Activate session mode to copy and aggregate content from multiple pages during a single browsing session.
+  - **Persistent Aggregation:** Each page you copy while in session mode gets appended to an aggregated text stored locally.
+  - **Visual Feedback:** See messages indicating which pages have been copied.
+  - **Session End:** Stop the session to clear the local state (without affecting the clipboard), so you can start a new aggregation later.
 
 ## Installation
 
@@ -47,13 +52,19 @@ with LLM.
 - **turndown.js:**  
   The full Turndown library used for converting HTML to Markdown (must be downloaded separately).
 
+
 ## Usage
 
-1. Open any webpage.
-2. Click the extension icon to open the popup.
-3. Click the "Copy as Markdown" button.
-4. The extension processes the page content and copies the Markdown-formatted text to your clipboard.
-5. Paste the content directly into your favorite text editor or an LLM interface.
+1. **Normal Mode:**
+   - Open any webpage.
+   - Click the **Copy as Markdown** button to copy the current page's plain text to your clipboard.
+
+2. **Session Mode:**
+   - Click the **Session: Copy from multiple web pages** button to start a session.
+   - The button text changes to **Stop Session**.
+   - Now navigate through different pages; clicking **Copy as Markdown** on each page appends that page’s content to a local session state.
+   - A message will appear below the session button for each page copied (e.g., “Page 1 copied.”).
+   - When finished, click **Stop Session**. This clears the session state locally while keeping the aggregated text in your clipboard.
 
 ## Contributing
 
