@@ -16,7 +16,7 @@ with LLM.
 2. **Content Processing:**  
    - A content script clones the current page's `<body>`.
    - It then removes all `<script>` and `<style>` elements to strip out unwanted JS/CSS.
-   - The full [Turndown](https://github.com/mixmark-io/turndown) library converts the cleaned HTML into Markdown.
+   - The  [Turndown](https://github.com/mixmark-io/turndown) library converts the cleaned HTML into Markdown.
    - Post‑processing steps remove any lingering markdown syntax so that only the visible text remains.
 3. **Clipboard Copy:** The processed Markdown is sent back to the popup, which copies it to the clipboard.
 4. **Feedback:** A “Copied” message is displayed in the popup once the operation is successful.
@@ -30,13 +30,11 @@ with LLM.
 
 1. **Clone or Download:**  
    Clone this repository or download the source code to your local machine.
-2. **Download Turndown:**  
-   Download the full Turndown library from [here](https://github.com/domchristie/turndown) or from a CDN. Save the file as `turndown.js` in the extension folder.
-3. **Load the Extension:**  
+2. **Load the Extension:**  
    - Open Chrome and go to `chrome://extensions/`.
    - Enable "Developer mode" in the top-right corner.
    - Click "Load unpacked" and select the folder containing the extension files.
-4. **Use the Extension:**  
+3. **Use the Extension:**  
    The extension icon will now appear in your Chrome toolbar. Click it to open the popup and use the "Copy as Markdown" button.
 
 ## Files Included
@@ -50,7 +48,7 @@ with LLM.
 - **content.js:**  
   Processes the active webpage by cleaning unwanted elements and converting HTML content into Markdown.
 - **turndown.js:**  
-  The full Turndown library used for converting HTML to Markdown (must be downloaded separately).
+  The full Turndown library used for converting HTML to Markdown . https://github.com/mixmark-io/turndown
 
 
 ## Usage
@@ -73,4 +71,5 @@ Contributions, suggestions, and bug reports are welcome! Please open an issue or
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+Check turndown's license in NOTICE.md
 
