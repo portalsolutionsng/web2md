@@ -16,7 +16,7 @@ with LLM.
 2. **Content Processing:**  
    - A content script clones the current page's `<body>`.
    - It then removes all `<script>` and `<style>` elements to strip out unwanted JS/CSS.
-   - The full [Turndown](https://github.com/domchristie/turndown) library converts the cleaned HTML into Markdown.
+   - The full [Turndown](https://github.com/mixmark-io/turndown) library converts the cleaned HTML into Markdown.
    - Post‑processing steps remove any lingering markdown syntax so that only the visible text remains.
 3. **Clipboard Copy:** The processed Markdown is sent back to the popup, which copies it to the clipboard.
 4. **Feedback:** A “Copied” message is displayed in the popup once the operation is successful.
