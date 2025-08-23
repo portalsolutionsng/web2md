@@ -1,8 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Copy As Markdown",
-  "version": "1.0",
-  "description": "Copy the visible page text as markdown",
+  "version": "1.1",
+  "description": "Copy the visible page text as Markdown (with Mermaid SVGs converted to mermaid blocks).",
+  "author": "Mbosinwa Awunor",
+  "homepage_url": "https://github.com/mbosinwa", 
   "permissions": [
     "scripting",
     "activeTab",
@@ -11,12 +13,12 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "copy as markdown"
+    "default_title": "Copy As Markdown"
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["turndown.js", "content.js"]
+      "js": ["turndown.js", "svgToMermaid.js", "content.js"]
     }
   ]
 }

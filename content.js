@@ -1,21 +1,25 @@
-import { svgToMermaid } from "./svgToMermaid.js";
-
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'copyAsMarkdown') {
-    // Clone the document body to avoid modifying the live DOM.
     let clone = document.body.cloneNode(true);
 
-    // Remove all script and style elements from the clone.
-    let elementsToRemove = clone.querySelectorAll('script, style');
-    elementsToRemove.forEach(el => el.remove());
+    // Remove script/style
+    clone.querySelectorAll('script, style').forEach(el => el.remove());
 
-    // ✅ Replace SVGs with Mermaid code blocks
+    // Convert SVG → Mermaid
+    const converter = new SvgToMermaidService();
+     console.log("SvgToMermaidService Loaded:\n");
     clone.querySelectorAll("svg").forEach(svgEl => {
       try {
-        const mermaidBlock = svgToMermaid(svgEl);
+        const mermaidBlock = converter.convert(svgEl);
         if (mermaidBlock) {
+          // --- DEBUGGING: log Mermaid immediately ---
+          console.log("Extracted Mermaid Diagram:\n", mermaidBlock);
+ 
           const pre = document.createElement("pre");
-          pre.textContent = mermaidBlock;
+          const code = document.createElement("code");
+          code.className = "language-mermaid";
+          code.textContent = mermaidBlock; // raw Mermaid code, no escaping
+          pre.appendChild(code);
           svgEl.replaceWith(pre);
         }
       } catch (err) {
@@ -23,11 +27,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
     });
 
-    // Convert the cleaned HTML (with Mermaid blocks injected) to Markdown.
-    const turndownService = new TurndownService();
+    // Markdown
+    const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
     let markdown = turndownService.turndown(clone.innerHTML);
 
-    sendResponse({ status: 'success', markdown: markdown });
+    sendResponse({ status: 'success', markdown });
     return true;
   }
 });

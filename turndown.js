@@ -336,6 +336,61 @@ var TurndownService = (function () {
     }
   };
 
+  rules.table = {
+  filter: 'table',
+  replacement: function (content, node) {
+    let rows = Array.from(node.querySelectorAll('tr'));
+    let headerRow = rows.shift();
+    let markdownTable = '';
+
+    if (headerRow) {
+      let headers = Array.from(headerRow.querySelectorAll('th')).map(th => th.textContent.trim());
+      let headerLine = '|' + headers.map(() => ':---:|').join('') + '\n';
+      markdownTable += '|' + headers.map(h => ` ${h} |`).join('') + '\n';
+      markdownTable += headerLine;
+    }
+
+    rows.forEach(row => {
+      let cells = Array.from(row.querySelectorAll('td')).map(td => td.textContent.trim());
+      markdownTable += '|' + cells.map(cell => ` ${cell} |`).join('') + '\n';
+    });
+
+    return markdownTable;
+  }
+};
+
+  rules.mermaid = {
+  /**
+   * Filter for the main container of a Mermaid diagram.
+   * This is often a <section> or <div> with a specific 'data-type' attribute.
+   */
+  filter: function (node) {
+    return node.nodeName === 'SECTION' && node.getAttribute('data-type') === 'mermaid';
+  },
+
+  /**
+   * Find the raw Mermaid code within a <pre> tag and format it
+   * as a fenced code block.
+   */
+  replacement: function (content, node) {
+    // Unlike the simple 'content', we query the node to find the specific code source.
+    const preElement = node.querySelector('pre[lang="mermaid"]');
+
+    // If the <pre> tag with the code is found, extract and format it.
+    if (preElement) {
+      // Get the raw text content of the <pre> tag.
+      const mermaidCode = preElement.textContent.trim();
+      
+      // Return the code wrapped in a markdown 'mermaid' block.
+      // The surrounding newlines ensure it's properly separated from other content.
+      return `\n\n\`\`\`mermaid\n${mermaidCode}\n\`\`\`\n\n`;
+    }
+
+    // If the expected structure isn't found, return an empty string to remove it.
+    return '';
+  }
+};
+
   function cleanAttribute (attribute) {
     return attribute ? attribute.replace(/(\n+\s*)+/g, '\n') : ''
   }
