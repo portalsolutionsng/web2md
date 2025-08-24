@@ -13,7 +13,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const mermaidBlock = converter.convert(svgEl);
         if (mermaidBlock) {
           // --- DEBUGGING: log Mermaid immediately ---
-          console.log("Extracted Mermaid Diagram:\n", mermaidBlock);
+          //console.log("Extracted Mermaid Diagram:\n", mermaidBlock);
  
           const pre = document.createElement("pre");
           const code = document.createElement("code");

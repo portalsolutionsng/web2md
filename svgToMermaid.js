@@ -15,7 +15,7 @@ class SvgToMermaidService {
     const hasFlowchartClass = svgEl.classList.contains("flowchart");
     
     const isKnownType = [
-      "flowchart", "sequenceDiagram", "gantt", 
+      "flowchart", "sequence", "gantt", 
       "classDiagram", "stateDiagram", "pie"
     ].some(type => ariaRole.startsWith(type));
 
@@ -37,6 +37,13 @@ class SvgToMermaidService {
     switch (true) {
       case /flowchart|graph/i.test(diagramType):
         return this._extractFlowchart(svgEl, diagramType);
+      // --- NEW: Added case for Sequence Diagrams ---
+      case /sequence/i.test(diagramType):
+        return this._extractSequenceDiagram(svgEl);
+      case /stateDiagram/i.test(diagramType):
+        return this._extractStateDiagram(svgEl);
+
+             
       default:
         console.warn(`Mermaid type "${diagramType}" is not yet supported for extraction.`);
         return `%% Mermaid diagram of type "${diagramType}" could not be parsed.`;
@@ -61,186 +68,598 @@ class SvgToMermaidService {
     
     return safeId || 'node';
   }
-
+  
+  // The _extractFlowchart function remains here, unchanged...
   /**
-   * Formats a label for a Mermaid node, escaping quotes and handling newlines.
-   * @param {string} htmlContent The innerHTML content from the SVG label element.
-   * @returns {string} A formatted label string like ["Label text"].
+   * Extracts flowchart/graph diagram syntax from an SVG element.
+   * @param {SVGSVGElement} svgEl The SVG element containing the diagram.
+   * @param {string} diagramType The type of diagram (e.g., 'graph' or 'flowchart').
+   * @returns {string} The generated Mermaid code.
    * @private
    */
-  _sanitizeMermaidLabel(htmlContent) {
-    // Replace <br> with a newline character for Mermaid syntax
-    const textWithNewlines = htmlContent.replace(/<br\s*\/?>/gi, '\n');
-    
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = textWithNewlines;
-    const decodedText = tempDiv.textContent || tempDiv.innerText || '';
-    
-    // Escape double quotes for use inside the label string
-    const escapedText = decodedText.replace(/"/g, '#quot;');
-    return `["${escapedText}"]`;
-  }
-
-/**
- * Extracts flowchart/graph diagram syntax from an SVG element.
- * @param {SVGSVGElement} svgEl The SVG element containing the diagram.
- * @param {string} diagramType The type of diagram (e.g., 'graph' or 'flowchart').
- * @returns {string} The generated Mermaid code.
- * @private
- */
-_extractFlowchart(svgEl, diagramType) {
-  // Helper to parse "translate(x,y)" attributes
-  const parseTransform = (transform) => {
-    const match = /translate\(([^,]+),([^)]+)\)/.exec(transform || '');
-    return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : { x: 0, y: 0 };
-  };
-
-  const nodes = new Map();
-  const rootNodes = [];
-  const edges = [];
-  const clusters = [];
-  const edgeLabels = [];
-  const LABEL_DISTANCE_THRESHOLD = 50;
-
-  // Pass 1: Find all clusters
-  svgEl.querySelectorAll("g.cluster").forEach(clusterEl => {
-    const rect = clusterEl.querySelector("rect");
-    const titleEl = clusterEl.querySelector(":scope > g.cluster-label foreignObject p");
-    if (!rect || !titleEl) return;
-    clusters.push({
-      title: titleEl.textContent.trim(),
-      x: parseFloat(rect.getAttribute("x")),
-      y: parseFloat(rect.getAttribute("y")),
-      width: parseFloat(rect.getAttribute("width")),
-      height: parseFloat(rect.getAttribute("height")),
-      nodes: []
+  _extractFlowchart(svgEl, diagramType) {
+    const parseTransform = (transform) => {
+      const match = /translate\(([^,]+),([^)]+)\)/.exec(transform || '');
+      return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : { x: 0, y: 0 };
+    };
+    const nodes = new Map();
+    const rootNodes = [];
+    const edges = [];
+    const clusters = [];
+    const edgeLabels = [];
+    const LABEL_DISTANCE_THRESHOLD = 50;
+    svgEl.querySelectorAll("g.cluster").forEach(clusterEl => {
+      const rect = clusterEl.querySelector("rect");
+      const titleEl = clusterEl.querySelector(":scope > g.cluster-label foreignObject p");
+      if (!rect || !titleEl) return;
+      clusters.push({
+        title: titleEl.textContent.trim(),
+        x: parseFloat(rect.getAttribute("x")),
+        y: parseFloat(rect.getAttribute("y")),
+        width: parseFloat(rect.getAttribute("width")),
+        height: parseFloat(rect.getAttribute("height")),
+        nodes: []
+      });
     });
-  });
-
-  // Pass 2: Find all nodes
-  svgEl.querySelectorAll("g.node").forEach(nodeEl => {
-    const idMatch = nodeEl.id?.match(/^flowchart-(.+?)-\d+$/);
-    if (!idMatch) return;
-    const originalId = idMatch[1];
-    const safeId = this._createSafeMermaidId(originalId);
-    const pEl = nodeEl.querySelector("foreignObject span.nodeLabel p");
-    if (!pEl) return;
-    const nodeText = pEl.textContent.trim();
-    let openDelim = '[';
-    let closeDelim = ']';
-    if (nodeEl.querySelector('polygon')) {
-      openDelim = '{'; closeDelim = '}';
-    } else if (nodeEl.querySelector('path[d*="Q"], path[d*="C"]')) {
-      openDelim = '('; closeDelim = ')';
-    }
-    let finalNodeText = nodeText;
-    const iconEl = pEl.querySelector('i.fa');
-    if (iconEl) {
-      const iconClass = Array.from(iconEl.classList).find(cls => cls.startsWith('fa-') && cls !== 'fa');
-      if (iconClass) {
-        const iconTextContent = iconEl.textContent.trim();
-        finalNodeText = `fa:${iconClass} ${nodeText.replace(iconTextContent, '').trim()}`.trim();
+    svgEl.querySelectorAll("g.node").forEach(nodeEl => {
+      const idMatch = nodeEl.id?.match(/^flowchart-(.+?)-\d+$/);
+      if (!idMatch) return;
+      const originalId = idMatch[1];
+      const safeId = this._createSafeMermaidId(originalId);
+      const pEl = nodeEl.querySelector("foreignObject span.nodeLabel p");
+      if (!pEl) return;
+      const nodeText = pEl.textContent.trim();
+      let openDelim = '[';
+      let closeDelim = ']';
+      if (nodeEl.querySelector('polygon')) {
+        openDelim = '{'; closeDelim = '}';
+      } else if (nodeEl.querySelector('path[d*="Q"], path[d*="C"]')) {
+        openDelim = '('; closeDelim = ')';
       }
-    }
-    const label = `${openDelim}"${finalNodeText}"${closeDelim}`;
-    const nodeDefinition = `${safeId}${label}`;
-    nodes.set(safeId, nodeDefinition); // Use the safeId as the key
-    const nodePos = parseTransform(nodeEl.getAttribute("transform"));
-    let assignedToCluster = false;
-    for (const cluster of clusters) {
-      if (nodePos.x >= cluster.x && nodePos.x <= cluster.x + cluster.width &&
-          nodePos.y >= cluster.y && nodePos.y <= cluster.y + cluster.height) {
-        cluster.nodes.push(nodeDefinition);
-        assignedToCluster = true;
-        break;
+      let finalNodeText = nodeText;
+      const iconEl = pEl.querySelector('i.fa');
+      if (iconEl) {
+        const iconClass = Array.from(iconEl.classList).find(cls => cls.startsWith('fa-') && cls !== 'fa');
+        if (iconClass) {
+          const iconTextContent = iconEl.textContent.trim();
+          finalNodeText = `fa:${iconClass} ${nodeText.replace(iconTextContent, '').trim()}`.trim();
+        }
       }
-    }
-    if (!assignedToCluster) {
-      rootNodes.push(nodeDefinition);
-    }
-  });
-
-  // Pass 2.5: Gather all edge labels and their positions
-  svgEl.querySelectorAll('g.edgeLabel').forEach(labelEl => {
-    const textEl = labelEl.querySelector('p');
-    const text = textEl ? textEl.textContent.trim() : '';
-    if (text) {
-      const pos = parseTransform(labelEl.getAttribute('transform'));
-      edgeLabels.push({ text, ...pos, used: false });
-    }
-  });
-  
-  // --- MODIFIED: Pass 3 - New edge parsing logic for complex IDs ---
-  const knownNodeIds = Array.from(nodes.keys());
-  svgEl.querySelectorAll("path.flowchart-link[id^='L_']").forEach(pathEl => {
-    const pathId = pathEl.id;
-    const idBodyMatch = pathId.match(/^L_(.+)_\d+$/);
-    if (!idBodyMatch) return;
-
-    const idBody = idBodyMatch[1];
-    let foundEdge = null;
-
-    // Iterate through known node IDs to find a matching source ID
-    for (const srcKey of knownNodeIds) {
-      if (idBody.startsWith(srcKey + '_')) {
-        const destKey = idBody.substring(srcKey.length + 1);
-        if (knownNodeIds.includes(destKey)) {
-          foundEdge = { srcId: srcKey, destId: destKey };
+      const label = `${openDelim}"${finalNodeText}"${closeDelim}`;
+      const nodeDefinition = `${safeId}${label}`;
+      nodes.set(safeId, nodeDefinition);
+      const nodePos = parseTransform(nodeEl.getAttribute("transform"));
+      let assignedToCluster = false;
+      for (const cluster of clusters) {
+        if (nodePos.x >= cluster.x && nodePos.x <= cluster.x + cluster.width &&
+            nodePos.y >= cluster.y && nodePos.y <= cluster.y + cluster.height) {
+          cluster.nodes.push(nodeDefinition);
+          assignedToCluster = true;
           break;
         }
       }
-    }
-
-    if (!foundEdge) return; // Skip if we couldn't parse the edge
-
-    let edgeText = '';
-    // Geometric label matching (remains the same)
-    if (pathEl.getTotalLength && typeof pathEl.getPointAtLength === 'function' && edgeLabels.length > 0) {
-      const totalLength = pathEl.getTotalLength();
-      if (totalLength > 0) {
-        const sampleRatios = [0.3, 0.5, 0.7];
-        let bestMatch = { label: null, distance: Infinity };
-        for (const ratio of sampleRatios) {
-          const point = pathEl.getPointAtLength(totalLength * ratio);
-          for (const label of edgeLabels) {
-            if (!label.used) {
-              const distance = Math.sqrt(Math.pow(point.x - label.x, 2) + Math.pow(point.y - label.y, 2));
-              if (distance < bestMatch.distance) {
-                bestMatch = { label, distance };
+      if (!assignedToCluster) {
+        rootNodes.push(nodeDefinition);
+      }
+    });
+    svgEl.querySelectorAll('g.edgeLabel').forEach(labelEl => {
+      const textEl = labelEl.querySelector('p');
+      const text = textEl ? textEl.textContent.trim() : '';
+      if (text) {
+        const pos = parseTransform(labelEl.getAttribute('transform'));
+        edgeLabels.push({ text, ...pos, used: false });
+      }
+    });
+    const knownNodeIds = Array.from(nodes.keys());
+    svgEl.querySelectorAll("path.flowchart-link[id^='L_']").forEach(pathEl => {
+      const pathId = pathEl.id;
+      const idBodyMatch = pathId.match(/^L_(.+)_\d+$/);
+      if (!idBodyMatch) return;
+      const idBody = idBodyMatch[1];
+      let foundEdge = null;
+      for (const srcKey of knownNodeIds) {
+        if (idBody.startsWith(srcKey + '_')) {
+          const destKey = idBody.substring(srcKey.length + 1);
+          if (knownNodeIds.includes(destKey)) {
+            foundEdge = { srcId: srcKey, destId: destKey };
+            break;
+          }
+        }
+      }
+      if (!foundEdge) return;
+      let edgeText = '';
+      if (pathEl.getTotalLength && typeof pathEl.getPointAtLength === 'function' && edgeLabels.length > 0) {
+        const totalLength = pathEl.getTotalLength();
+        if (totalLength > 0) {
+          const sampleRatios = [0.3, 0.5, 0.7];
+          let bestMatch = { label: null, distance: Infinity };
+          for (const ratio of sampleRatios) {
+            const point = pathEl.getPointAtLength(totalLength * ratio);
+            for (const label of edgeLabels) {
+              if (!label.used) {
+                const distance = Math.sqrt(Math.pow(point.x - label.x, 2) + Math.pow(point.y - label.y, 2));
+                if (distance < bestMatch.distance) {
+                  bestMatch = { label, distance };
+                }
               }
             }
           }
-        }
-        if (bestMatch.label && bestMatch.distance < LABEL_DISTANCE_THRESHOLD) {
-          edgeText = `|${bestMatch.label.text}|`;
-          bestMatch.label.used = true;
+          if (bestMatch.label && bestMatch.distance < LABEL_DISTANCE_THRESHOLD) {
+            edgeText = `|${bestMatch.label.text}|`;
+            bestMatch.label.used = true;
+          }
         }
       }
-    }
-    
-    const isDotted = pathEl.classList.contains('edge-pattern-dotted');
-    const linkArrow = isDotted ? '-.->' : '-->';
-    
-    edges.push(`    ${foundEdge.srcId} ${linkArrow} ${edgeText} ${foundEdge.destId}`);
-  });
+      const isDotted = pathEl.classList.contains('edge-pattern-dotted');
+      const linkArrow = isDotted ? '-.->' : '-->';
+      edges.push(`    ${foundEdge.srcId} ${linkArrow} ${edgeText} ${foundEdge.destId}`);
+    });
+    let mermaidCode = `${diagramType.toLowerCase()} TD\n`;
+    rootNodes.forEach(nodeDef => {
+        mermaidCode += `    ${nodeDef}\n`;
+    });
 
-  // Pass 4: Assemble the Mermaid code
-  let mermaidCode = `${diagramType.toLowerCase()} TD\n`;
-  rootNodes.forEach(nodeDef => {
-      mermaidCode += `    ${nodeDef}\n`;
-  });
-  clusters.forEach(cluster => {
-    if (cluster.nodes.length > 0) {
-      mermaidCode += `\n    subgraph "${cluster.title}"\n`;
-      cluster.nodes.forEach(nodeDef => {
-          mermaidCode += `        ${nodeDef}\n`;
-      });
-      mermaidCode += `    end\n`;
+    // Sort clusters by their vertical position (top-to-bottom) before rendering
+    clusters.sort((a, b) => a.y - b.y);
+
+    clusters.forEach(cluster => {
+      if (cluster.nodes.length > 0) {
+        mermaidCode += `\n    subgraph "${cluster.title}"\n`;
+        cluster.nodes.forEach(nodeDef => {
+            mermaidCode += `        ${nodeDef}\n`;
+        });
+        mermaidCode += `    end\n`;
+      }
+    });
+    if (edges.length > 0) {
+        mermaidCode += '\n' + edges.join('\n').replace(/ \s+/g, ' ');
     }
-  });
-  if (edges.length > 0) {
-      mermaidCode += '\n' + edges.join('\n').replace(/ \s+/g, ' ');
+    return mermaidCode.trim();
   }
-  return mermaidCode.trim();
+
+  // --- NEW: Function to extract Sequence Diagrams ---
+  /**
+   * Extracts sequence diagram syntax from an SVG element.
+   * @param {SVGSVGElement} svgEl The SVG element containing the diagram.
+   * @returns {string} The generated Mermaid code.
+   * @private
+   */
+  _extractSequenceDiagram(svgEl) {
+    const actors = [];
+    const timeline = [];
+
+    // 1. Find all actors (participants) and their properties
+    svgEl.querySelectorAll('line.actor-line').forEach(lineEl => {
+      const id = lineEl.getAttribute('name');
+      const x = parseFloat(lineEl.getAttribute('x1'));
+      const textEl = svgEl.querySelector(`rect.actor-top[name="${id}"] + text.actor`);
+      if (id && textEl) {
+        const label = textEl.textContent.trim().replace(/"/g, '');
+        actors.push({ id: this._createSafeMermaidId(id), label, x });
+      }
+    });
+    
+    // Sort actors by their horizontal position (left-to-right)
+    actors.sort((a, b) => a.x - b.x);
+
+    // Helper to find the actor closest to a given X coordinate
+    const findClosestActor = (xPos) => {
+      return actors.reduce((closest, actor) => {
+        const distance = Math.abs(actor.x - xPos);
+        return distance < closest.distance ? { actor, distance } : closest;
+      }, { actor: null, distance: Infinity }).actor;
+    };
+
+    // 2. Gather all message lines and texts into a single timeline
+    svgEl.querySelectorAll('line[class^="messageLine"], text.messageText').forEach(el => {
+      if (el.tagName.toLowerCase() === 'line') {
+        const y = parseFloat(el.getAttribute('y1'));
+        const x1 = parseFloat(el.getAttribute('x1'));
+        const x2 = parseFloat(el.getAttribute('x2'));
+        // messageLine0 is solid, messageLine1 is dashed
+        const arrow = el.classList.contains('messageLine1') ? '-->>-' : '->>+';
+        timeline.push({ type: 'line', y, x1, x2, arrow });
+      } else { // It's a text element
+        const y = parseFloat(el.getAttribute('y'));
+        const text = el.textContent.trim().replace(/"/g, '');
+        if (text) {
+          timeline.push({ type: 'text', y, text });
+        }
+      }
+    });
+    
+    // 3. Sort the timeline from top to bottom
+    timeline.sort((a, b) => a.y - b.y);
+
+    // 4. Build the Mermaid code
+    let mermaidCode = 'sequenceDiagram\n';
+
+    // Add participant definitions using aliases for safety
+    actors.forEach(actor => {
+      mermaidCode += `    participant ${actor.id} as ${actor.label}\n`;
+    });
+    mermaidCode += '\n';
+
+    // Process the timeline to create messages
+    let lastText = '';
+    timeline.forEach(item => {
+      if (item.type === 'text') {
+        lastText = item.text; // Store the text for the next line
+      } else if (item.type === 'line') {
+        const source = findClosestActor(item.x1);
+        const dest = findClosestActor(item.x2);
+        if (source && dest) {
+          mermaidCode += `    ${source.id}${item.arrow}${dest.id}: ${lastText}\n`;
+          lastText = ''; // Reset text after using it
+        }
+      }
+    });
+
+    return mermaidCode.trim();
+  }
+
+
+_extractStateDiagram(svgEl) {
+    // ---------- helpers ----------
+    const parseTransform = (transform) => {
+        const m = /translate\(([^,]+),([^)]+)\)/.exec(transform || '');
+        return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : { x: 0, y: 0 };
+    };
+
+    const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+    const normalizeLabel = (raw) => {
+        if (!raw) return '';
+        const t = raw.trim();
+        return t.replace(/^"(.*)"$/, '$1');
+    };
+
+    const getPathEndpoints = (pathEl) => {
+        const L = pathEl.getTotalLength ? pathEl.getTotalLength() : 0;
+        if (!L) return null;
+        return {
+            start: pathEl.getPointAtLength(0),
+            end: pathEl.getPointAtLength(L),
+            len: L,
+        };
+    };
+
+    const samplePoints = (pathEl, ratios = [0.25, 0.5, 0.75]) => {
+        const L = pathEl.getTotalLength ? pathEl.getTotalLength() : 0;
+        if (!L) return [];
+        return ratios.map(r => pathEl.getPointAtLength(L * r));
+    };
+
+    const groupKeyOfPath = (el) => {
+        const id = el.getAttribute('id') || '';
+        return id.replace(/-(?:\d+|mid|start|end)$/, '');
+    };
+
+    // ---------- 1) collect states & notes ----------
+    const states = [];
+    const stateById = new Map();
+
+    svgEl.querySelectorAll('g.node').forEach(nodeEl => {
+        const pos = parseTransform(nodeEl.getAttribute('transform'));
+        if (nodeEl.id.includes('_start')) {
+            const obj = { id: '__start__', ...pos };
+            states.push(obj); stateById.set(obj.id, obj);
+            return;
+        }
+        if (nodeEl.id.includes('_end')) {
+            const obj = { id: '__end__', ...pos };
+            states.push(obj); stateById.set(obj.id, obj);
+            return;
+        }
+        if (nodeEl.classList.contains('statediagram-note')) return;
+
+        const idMatch = nodeEl.id?.match(/^state-(.+?)-\d+$/);
+        const labelEl = nodeEl.querySelector('.nodeLabel p');
+        if (idMatch && labelEl) {
+            const stateId = this._createSafeMermaidId(idMatch[1]);
+            const obj = { id: stateId, ...pos };
+            states.push(obj);
+            stateById.set(stateId, obj);
+        }
+    });
+
+    const findClosestState = (pt) => {
+        let best = null, bestD = Infinity;
+        for (const s of states) {
+            const d = dist(s, pt);
+            if (d < bestD) { best = s; bestD = d; }
+        }
+        return best;
+    };
+
+    const noteNodes = [];
+    svgEl.querySelectorAll('g.statediagram-note').forEach(noteEl => {
+        const pos = parseTransform(noteEl.getAttribute('transform'));
+        const labelEl = noteEl.querySelector('.nodeLabel');
+        if (!labelEl) return;
+        const pEl = labelEl.querySelector('p');
+        if (!pEl) return;
+        const text = pEl.innerHTML
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<[^>]*>/g, '')
+            .trim();
+        noteNodes.push({ el: noteEl, text, ...pos });
+    });
+
+    // ---------- 2) collect labels ----------
+    const edgeLabels = [];
+    svgEl.querySelectorAll('g.edgeLabel').forEach(labelEl => {
+        const p = labelEl.querySelector('p');
+        if (!p) return;
+        const text = normalizeLabel(p.textContent || '');
+        if (!text) return;
+        const pos = parseTransform(labelEl.getAttribute('transform'));
+        edgeLabels.push({ text, ...pos, used: false });
+    });
+
+    const LABEL_DISTANCE = 90;
+    const findNearestLabel = (points) => {
+        let best = null, bestD = Infinity, bestIdx = -1;
+        for (let i = 0; i < edgeLabels.length; i++) {
+            const lbl = edgeLabels[i];
+            if (lbl.used) continue;
+            for (const pt of points) {
+                const d = dist(pt, lbl);
+                if (d < bestD) { best = lbl; bestD = d; bestIdx = i; }
+            }
+        }
+        if (best && bestD <= LABEL_DISTANCE) {
+            edgeLabels[bestIdx].used = true;
+            return best.text;
+        }
+        return '';
+    };
+
+    // ---------- 3) collect note connectors and map note -> state ----------
+    const noteLinks = [];
+    const noteEdgePaths = svgEl.querySelectorAll('path.note-edge');
+    if (noteEdgePaths.length && noteNodes.length) {
+        noteEdgePaths.forEach(pathEl => {
+            const ep = getPathEndpoints(pathEl);
+            if (!ep) return;
+            let nearestNoteIdx = -1, nearestNoteD = Infinity, noteEnd = null;
+            for (const end of [ep.start, ep.end]) {
+                for (let i = 0; i < noteNodes.length; i++) {
+                    const d = dist(end, noteNodes[i]);
+                    if (d < nearestNoteD) {
+                        nearestNoteD = d; nearestNoteIdx = i; noteEnd = end;
+                    }
+                }
+            }
+            if (nearestNoteIdx >= 0) {
+                const otherEnd = (noteEnd === ep.start) ? ep.end : ep.start;
+                const st = findClosestState(otherEnd);
+                if (st) noteLinks.push({ noteIdx: nearestNoteIdx, stateId: st.id });
+            }
+        });
+    }
+
+    const noteToState = new Map();
+    noteNodes.forEach((n, idx) => {
+        const linked = noteLinks.find(l => l.noteIdx === idx);
+        if (linked) {
+            noteToState.set(idx, linked.stateId);
+        } else {
+            const st = findClosestState(n);
+            if (st) noteToState.set(idx, st.id);
+        }
+    });
+
+    // ---------- 4) collect edges (group multi-segment transitions) ----------
+    const transitionPaths = Array.from(svgEl.querySelectorAll('path.transition:not(.note-edge)'));
+    const groups = new Map();
+    for (const p of transitionPaths) {
+        const key = groupKeyOfPath(p);
+        if (!groups.has(key)) groups.set(key, { paths: [] });
+        groups.get(key).paths.push(p);
+    }
+
+    const rawEdges = [];
+    for (const { paths } of groups.values()) {
+        const samples = [];
+        for (const p of paths) {
+            const ep = getPathEndpoints(p);
+            if (ep && ep.len > 0) {
+                samples.push(...samplePoints(p));
+            }
+        }
+        if (samples.length === 0) continue;
+
+        let srcId, dstId;
+        if (paths.length === 1) {
+            const ep = getPathEndpoints(paths[0]);
+            const s = findClosestState(ep.start);
+            const d = findClosestState(ep.end);
+            if (!s || !d) continue;
+            srcId = s.id;
+            dstId = d.id;
+        } else {
+            const segments = paths.map(p => ({ el: p, ...getPathEndpoints(p) })).filter(s => s && s.len > 0);
+            const allPoints = segments.flatMap(s => [{ point: s.start }, { point: s.end }]);
+            const looseEnds = allPoints.filter(p1 => {
+                return allPoints.filter(p2 => p1 !== p2 && dist(p1.point, p2.point) < 5).length === 0;
+            }).map(p => p.point);
+
+            if (looseEnds.length !== 2) continue;
+
+            const endPath = paths.find(p => p.getAttribute('marker-end'));
+            const endPathEndpoint = endPath ? getPathEndpoints(endPath).end : null;
+            if (!endPathEndpoint) continue;
+
+            let startPoint, endPoint;
+            if (dist(looseEnds[0], endPathEndpoint) < 5) {
+                endPoint = looseEnds[0];
+                startPoint = looseEnds[1];
+            } else {
+                endPoint = looseEnds[1];
+                startPoint = looseEnds[0];
+            }
+            
+            const s = findClosestState(startPoint);
+            const d = findClosestState(endPoint);
+            if (!s || !d) continue;
+            srcId = s.id;
+            dstId = d.id;
+        }
+
+        const label = findNearestLabel(samples);
+        if (!label && srcId !== '__start__' && dstId !== '__end__') continue;
+        rawEdges.push({ src: srcId, dst: dstId, label });
+    }
+
+    const seen = new Set();
+    const edges = rawEdges.filter(e => {
+        const key = `${e.src}->${e.dst}:${e.label || ''}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+
+    // ---------- 5) stable ordering ----------
+    const nameKey = (id) => (id === '__start__' || id === '__end__' ? '[*]' : id);
+    const normalStates = states
+        .filter(s => s.id !== '__start__' && s.id !== '__end__')
+        .sort((a, b) => a.y - b.y)
+        .map(s => s.id);
+    const srcOrder = new Map(normalStates.map((id, i) => [id, i]));
+    const isStartEdge = e => e.src === '__start__';
+    const isEndEdge = e => e.dst === '__end__';
+    const isSelf = e => e.src === e.dst;
+    const alpha = (a, b) => a.localeCompare(b);
+
+    const startEdges = edges.filter(isStartEdge).sort((a, b) => alpha(nameKey(a.dst), nameKey(b.dst)));
+    const endEdges = edges.filter(isEndEdge).sort((a, b) => alpha(nameKey(a.src), nameKey(b.src)));
+    const middleEdges = edges.filter(e => !isStartEdge(e) && !isEndEdge(e))
+        .sort((a, b) => {
+            const ao = srcOrder.get(a.src) ?? 9999;
+            const bo = srcOrder.get(b.src) ?? 9999;
+            if (ao !== bo) return ao - bo;
+            if (isSelf(a) !== isSelf(b)) return isSelf(a) ? 1 : -1;
+            const d = alpha(nameKey(a.dst), nameKey(b.dst));
+            if (d) return d;
+            return alpha(a.label || '', b.label || '');
+        });
+
+    // ---------- 6) FIXED NOTE SIDE DETERMINATION ----------
+    const determineNoteSide = (note, state) => {
+        const yDiff = note.y - state.y;
+        const xDiff = note.x - state.x;
+        
+        // Key insight: Mermaid state diagrams use vertical positioning for notes
+        // Based on the known issue: "left of" notes appear ABOVE, "right of" notes appear BELOW
+        
+        // Primary strategy: Use vertical positioning
+        const isAbove = yDiff < 0; // Note Y < State Y means note is above
+        const isBelow = yDiff > 0; // Note Y > State Y means note is below
+        
+        // Threshold for clear vertical separation
+        const verticalThreshold = 30;
+        
+        // Clear vertical positioning
+        if (Math.abs(yDiff) > verticalThreshold) {
+            if (isAbove) {
+                return 'left of';  // Above = "left of" in Mermaid state diagrams
+            } else {
+                return 'right of'; // Below = "right of" in Mermaid state diagrams  
+            }
+        }
+        
+        // Fallback to horizontal positioning for edge cases
+        const horizontalThreshold = 50;
+        if (Math.abs(xDiff) > horizontalThreshold) {
+            return xDiff < 0 ? 'left of' : 'right of';
+        }
+        
+        // Final fallback: slight preference based on both axes
+        if (Math.abs(yDiff) >= Math.abs(xDiff)) {
+            // Vertical positioning dominates
+            return yDiff <= 0 ? 'left of' : 'right of';
+        } else {
+            // Horizontal positioning dominates
+            return xDiff <= 0 ? 'left of' : 'right of';
+        }
+    };
+
+    // ---------- 7) render Mermaid ----------
+    let out = 'stateDiagram-v2\n';
+    const emitEdge = (e) => {
+        const src = nameKey(e.src);
+        const dst = nameKey(e.dst);
+        const label = e.label ? ` : "${normalizeLabel(e.label)}"` : '';
+        const pad = (isSelf(e) && label) ? '  ' : '';
+        out += `  ${src} --> ${dst}${pad}${label}\n`;
+    };
+
+    const spacer = () => { if (!out.endsWith('\n\n')) out += '\n'; };
+    if (startEdges.length) { startEdges.forEach(emitEdge); spacer(); }
+    if (middleEdges.length) { middleEdges.forEach(emitEdge); spacer(); }
+    if (endEdges.length) { endEdges.forEach(emitEdge); spacer(); }
+
+    const groupedNotes = new Map();
+    noteNodes.forEach((n, idx) => {
+        const targetId = noteToState.get(idx);
+        if (!targetId) return;
+        if (!groupedNotes.has(targetId)) groupedNotes.set(targetId, []);
+        groupedNotes.get(targetId).push(n);
+    });
+
+    const stateOrderForNotes = [...groupedNotes.keys()]
+        .map(id => ({ id, y: stateById.get(id)?.y ?? 0 }))
+        .sort((a, b) => a.y - b.y)
+        .map(o => o.id);
+
+    const debugLog = [];
+
+    for (const sid of stateOrderForNotes) {
+        const notesForState = groupedNotes.get(sid) || [];
+        const targetState = stateById.get(sid);
+        if (!targetState) continue;
+
+        for (const note of notesForState) {
+            const noteSide = determineNoteSide(note, targetState);
+            const yDiff = note.y - targetState.y;
+            const xDiff = note.x - targetState.x;
+            const isAbove = yDiff < 0;
+            const isBelow = yDiff > 0;
+            
+            const debugMsg = `Processing Note for '${sid}': State(${targetState.x.toFixed(2)}, ${targetState.y.toFixed(2)}), Note(${note.x.toFixed(2)}, ${note.y.toFixed(2)}). YDiff=${yDiff.toFixed(2)} ${isAbove ? '[ABOVE]' : isBelow ? '[BELOW]' : '[SAME_LEVEL]'}. XDiff=${xDiff.toFixed(2)}. Result: '${noteSide}'`;
+            debugLog.push(debugMsg);
+            
+            out += `\n  note ${noteSide} ${sid}\n`;
+            out += `    ${note.text.replace(/\r?\n/g, '\n    ')}\n`;
+            out += `  end note\n`;
+        }
+    }
+    
+    out += '\n\n%% --- Debug Log ---\n';
+    
+    // Add raw data dumps to the log
+    out += '%% --- States ---\n';
+    stateById.forEach((state, id) => {
+        out += `%% ID: ${id}, X: ${state.x.toFixed(2)}, Y: ${state.y.toFixed(2)}\n`;
+    });
+    out += '%% --- Notes ---\n';
+    noteNodes.forEach((note, i) => {
+        const textSample = note.text.substring(0, 20).replace(/\n/g, ' ');
+        out += `%% Index: ${i}, X: ${note.x.toFixed(2)}, Y: ${note.y.toFixed(2)}, Text: "${textSample}..."\n`;
+    });
+    out += '%% --- Note Links ---\n';
+     noteToState.forEach((stateId, noteIndex) => {
+         out += `%% Note[${noteIndex}] is linked to State '${stateId}'\n`;
+     });
+
+    out += '%% --- Vertical Positioning Analysis ---\n';
+    out += `%% Key: In Mermaid state diagrams, 'left of' = ABOVE, 'right of' = BELOW\n`;
+    out += debugLog.map(line => `%% ${line}`).join('\n');
+
+    return out.trim();
 }
+
+
+
 }
